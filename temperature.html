@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BOF/LD Converter Temperature Calculator</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      max-width: 750px;
+      margin: 0 auto;
+      padding: 30px;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    
+    h2 {
+      color: #2c3e50;
+      text-align: center;
+      padding-bottom: 15px;
+      margin-bottom: 30px;
+      position: relative;
+    }
+    
+    h2:after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 25%;
+      right: 25%;
+      height: 3px;
+      background: linear-gradient(90deg, #3498db, #2ecc71);
+      border-radius: 3px;
+    }
+    
+    label {
+      display: inline-block;
+      width: 300px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #2c3e50;
+    }
+    
+    input {
+      padding: 10px;
+      width: 150px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 15px;
+      transition: all 0.3s ease;
+    }
+    
+    input:focus {
+      border-color: #3498db;
+      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+      outline: none;
+    }
+    
+    button {
+      background: linear-gradient(135deg, #3498db, #2ecc71);
+      color: white;
+      padding: 12px 30px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      margin: 25px auto;
+      display: block;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    #result {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      margin-top: 25px;
+      border-left: 4px solid #3498db;
+    }
+    
+    .warning {
+      color: #e74c3c;
+      font-weight: bold;
+    }
+    
+    .success {
+      color: #27ae60;
+      font-weight: bold;
+    }
+    
+    .checkbox-container {
+      margin: 20px 0;
+      display: flex;
+      align-items: center;
+    }
+    
+    .checkbox-container input {
+      width: auto;
+      margin-right: 10px;
+    }
+    
+    .checkbox-container label {
+      width: auto;
+      margin-left: 0;
+      font-weight: normal;
+      color: #555;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+      body {
+        padding: 15px;
+      }
+      
+      label {
+        width: 100%;
+        margin-bottom: 5px;
+      }
+      
+      input {
+        width: 100%;
+        margin-bottom: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2>BOF/LD Converter Temperature Calculator</h2>
+
+  <label>Initial Steel Temperature (°C):</label>
+  <input type="number" id="initialTemp" value="1600"><br><br>
+
+  <label>Steel Mass (tonnes):</label>
+  <input type="number" id="steelMass" value="120"><br><br>
+
+  <label>Carbon % in Steel:</label>
+  <input type="number" id="carbonPercent" value="0.20" step="0.01"><br><br>
+
+  <label>Oxygen Supplied (Nm³):</label>
+  <input type="number" id="oxygenSupplied" value="450"><br><br>
+
+  <label>Oxygen (%):</label>
+  <input type="number" id="oxygenEfficiency" value="99"><br><br>
+
+  <div class="checkbox-container">
+    <input type="checkbox" id="slagCheckbox">
+    <label for="slagCheckbox">Include slag effect (75% temperature rise)</label>
+  </div>
+
+  <button onclick="calculateTemperature()">Calculate Temperature</button>
+
+  <div id="result"></div>
+
+  <script>
+    function calculateTemperature() {
+      // Inputs
+      const initialTemp = parseFloat(document.getElementById("initialTemp").value);
+      const steelMassTons = parseFloat(document.getElementById("steelMass").value);
+      const carbonPercent = parseFloat(document.getElementById("carbonPercent").value);
+      const oxygenNm3 = parseFloat(document.getElementById("oxygenSupplied").value);
+      const oxygenEfficiency = parseFloat(document.getElementById("oxygenEfficiency").value) / 100;
+      const hasSlag = document.getElementById("slagCheckbox").checked;
+
+      // Constants
+      const steelMassKg = steelMassTons * 1000;
+      const cpSteel = 0.82; // kJ/kg·K
+      const molarVol = 0.0224; // Nm³/mol at STP
+      const heatC = 394; // kJ/mol (C + O2 → CO2)
+      const heatFe = 272; // kJ/mol (2Fe + 1.5O2 → Fe2O3)
+      const blowingHeatLossFactor = 0.99; // 1% heat loss
+      const minCarbonPercent = 0.02; // 0.02% C cap
+      const realWorldCFactor = 0.5; // Only 50% of C heat contributes to temp rise
+      const slagFactor = hasSlag ? 0.75 : 1.0; // Slag effect factor
+
+      // Carbon calculations
+      const initialCarbonKg = steelMassKg * (carbonPercent / 100);
+      const targetCarbonKg = steelMassKg * (minCarbonPercent / 100);
+      const carbonToRemoveKg = initialCarbonKg - targetCarbonKg;
+
+      // Moles of C to remove and O2 required (1:1 for CO2)
+      const molCToRemove = carbonToRemoveKg / 0.01201;
+      const molO2ForC = molCToRemove * 1;
+
+      // Total O2 available (after efficiency)
+      const totalO2Mol = (oxygenNm3 * oxygenEfficiency) / molarVol;
+
+      // Oxygen allocation
+      let molO2UsedByC = 0;
+      let molO2UsedByFe = 0;
+      let actualCarbonRemovedKg = 0;
+      let heatFromC = 0;
+      let heatFromFe = 0;
+
+      if (totalO2Mol < molO2ForC) {
+        // Case 1: Not enough O2 to reach 0.02% C
+        molO2UsedByC = totalO2Mol;
+        actualCarbonRemovedKg = molO2UsedByC * 0.01201;
+        heatFromC = molO2UsedByC * heatC;
+      } else {
+        // Case 2: Enough O2 to reach 0.02% C, excess for Fe
+        molO2UsedByC = molO2ForC;
+        actualCarbonRemovedKg = carbonToRemoveKg;
+        heatFromC = molO2UsedByC * heatC;
+        molO2UsedByFe = totalO2Mol - molO2ForC;
+        heatFromFe = molO2UsedByFe * heatFe;
+      }
+
+      // Final carbon %
+      const finalCarbonKg = initialCarbonKg - actualCarbonRemovedKg;
+      const finalCarbonPercent = (finalCarbonKg / steelMassKg) * 100;
+
+      // Temperature calculation with real-world adjustment and slag factor
+      const adjustedHeatFromC = heatFromC * realWorldCFactor;
+      const totalHeat = (adjustedHeatFromC + heatFromFe) * blowingHeatLossFactor;
+      let deltaT = totalHeat / (steelMassKg * cpSteel);
+      deltaT = deltaT * slagFactor; // Apply slag factor
+      const finalTemp = initialTemp + deltaT;
+
+      // Output
+      document.getElementById("result").innerHTML = `
+        <p><b>Temperature Rise:</b> ${deltaT.toFixed(1)} °C</p>
+        <p><b>Final Steel Temperature:</b> <span class="${finalCarbonPercent <= 0.02 ? 'success' : 'warning'}">${finalTemp.toFixed(1)} °C</span></p>
+      `;
+    }
+  </script>
+</body>
+</html>
